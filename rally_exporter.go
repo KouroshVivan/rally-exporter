@@ -2,6 +2,7 @@ package main
 
 import (
 	"net/http"
+	"strings"
 
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/client_golang/prometheus/promhttp"
@@ -9,7 +10,7 @@ import (
 	"github.com/prometheus/common/version"
 	"gopkg.in/alecthomas/kingpin.v2"
 
-	"github.com/fitbeard/rally-exporter/rally"
+	"github.com/KouroshVivan/rally-exporter/rally"
 )
 
 func main() {
@@ -41,26 +42,59 @@ func main() {
 	kingpin.Parse()
 
 	// Get rid of any additional metrics
-    // we have to expose our metrics with a custom registry
+	// we have to expose our metrics with a custom registry
 	registry := prometheus.NewRegistry()
 
 	runner := rally.NewPeriodicRunner(*deployment, *exectime, *taskcount)
 
-    registry.MustRegister(runner)
+	registry.MustRegister(runner)
 
 	go runner.Run()
 
-    handler := promhttp.HandlerFor(registry, promhttp.HandlerOpts{})
-	http.Handle("/metrics", handler)
+	handler := promhttp.HandlerFor(registry, promhttp.HandlerOpts{})
+	http.Handle(*metricsPath, handler)
+
+	http.HandleFunc("/task/", func(w http.ResponseWriter, r *http.Request) {
+		segments := strings.Split(r.URL.Path, "/")
+		if len(segments) == 3 {
+			TaskUUID := segments[2]
+			log.Info("Generate report for ", TaskUUID)
+			report, r_err := runner.GenReport(TaskUUID)
+			if r_err != nil {
+				log.Error("Failed to generate report ", r_err)
+				w.WriteHeader(http.StatusNotFound)
+			} else {
+				w.Write(report)
+			}
+		}
+	})
+
+	http.HandleFunc("/task", func(w http.ResponseWriter, r *http.Request) {
+		_, err := w.Write([]byte(`<html>
+<head><title>OpenStack Rally Exporter</title></head>
+<body>
+	<h1>OpenStack Rally Exporter</h1>
+	<p>
+	` + runner.GetTasks() + `
+	</p>
+</body>
+</html>`))
+		if err != nil {
+			log.Error(err)
+		}
+
+	})
 
 	http.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
 		_, err := w.Write([]byte(`<html>
-			<head><title>OpenStack Rally Exporter</title></head>
-			<body>
-			<h1>OpenStack Rally Exporter</h1>
-			<p><a href="` + *metricsPath + `">Metrics</a></p>
-			</body>
-			</html>`))
+<head><title>OpenStack Rally Exporter</title></head>
+<body>
+	<h1>OpenStack Rally Exporter</h1>
+	<p><a href="` + *metricsPath + `">Metrics</a></p>
+	<p><a href="/task">List Tasks</a></p>
+	<p><a href="/task/UUID">Report for Task UUID</a></p>
+</body>
+</html>`))
 		if err != nil {
 			log.Error(err)
 		}
