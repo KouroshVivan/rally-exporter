@@ -11,7 +11,7 @@ import (
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/common/log"
 
-	"github.com/fitbeard/rally-exporter/models"
+	"github.com/KouroshVivan/rally-exporter/models"
 )
 
 // TaskLabels has the common labels used by every task.
@@ -21,9 +21,10 @@ var TaskLabels = []string{"title"}
 type PeriodicRunner struct {
 	prometheus.Collector
 
-	CloudName string
-	ExecTime  int
-	TaskCount int
+	CloudName       string
+	ExecTime        int
+	TaskCount       int
+	FailedTaskCount int
 
 	TaskDuration *prometheus.Desc
 	TaskSLADesc  *prometheus.Desc
@@ -63,11 +64,11 @@ func (runner *PeriodicRunner) Run() {
 	for {
 		currentTime := time.Now()
 
-		count := strconv.Itoa(runner.TaskCount)
+		taskcount := strconv.Itoa(runner.TaskCount)
 
 		log.Info("Deleting last Rally task")
-        // This is horrible. Should be rewritten in native golang.
-		precmd := exec.Command("/delete-tasks.sh", count)
+		// This is horrible. Should be rewritten in native golang.
+		precmd := exec.Command("/delete-tasks.sh", taskcount)
 		preoutput, err := precmd.CombinedOutput()
 		if err != nil {
 			log.Error("Failed to delete last Rally task:")
@@ -118,6 +119,13 @@ func (runner *PeriodicRunner) Describe(ch chan<- *prometheus.Desc) {
 }
 
 func getLatestTask(db *gorm.DB) (*models.Task, error) {
+	task := &models.Task{}
+	err := db.Not("status", []string{"running"}).Last(task).Error
+
+	return task, err
+}
+
+func getAllTask(db *gorm.DB) (*models.Task, error) {
 	task := &models.Task{}
 	err := db.Not("status", []string{"running"}).Last(task).Error
 

@@ -9,7 +9,7 @@ import (
 	"github.com/prometheus/common/version"
 	"gopkg.in/alecthomas/kingpin.v2"
 
-	"github.com/fitbeard/rally-exporter/rally"
+	"github.com/KouroshVivan/rally-exporter/rally"
 )
 
 func main() {
@@ -41,17 +41,17 @@ func main() {
 	kingpin.Parse()
 
 	// Get rid of any additional metrics
-    // we have to expose our metrics with a custom registry
+	// we have to expose our metrics with a custom registry
 	registry := prometheus.NewRegistry()
 
 	runner := rally.NewPeriodicRunner(*deployment, *exectime, *taskcount)
 
-    registry.MustRegister(runner)
+	registry.MustRegister(runner)
 
 	go runner.Run()
 
-    handler := promhttp.HandlerFor(registry, promhttp.HandlerOpts{})
-	http.Handle("/metrics", handler)
+	handler := promhttp.HandlerFor(registry, promhttp.HandlerOpts{})
+	http.Handle(*metricsPath, handler)
 
 	http.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
 		_, err := w.Write([]byte(`<html>
